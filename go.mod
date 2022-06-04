@@ -1,4 +1,4 @@
-module github.com/QQGoblin/go-sdk
+module go-sdk
 
 go 1.16
 
