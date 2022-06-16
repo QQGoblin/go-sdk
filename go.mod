@@ -15,5 +15,4 @@ require (
 	k8s.io/kubectl v0.24.0
 	k8s.io/sample-controller v0.24.1
 	sigs.k8s.io/controller-runtime v0.12.1
-
 )
