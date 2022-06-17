@@ -35,6 +35,8 @@ const (
 	// ClusterRole to the system:nodes group. Since kubeadm is using the Node Authorizer, this ClusterRoleBinding's
 	// system:nodes group subject is removed if present.
 	NodesClusterRoleBinding = "system:node"
+
+	ProxyUser = "system:kube-proxy"
 )
 
 // clientCertAuth struct holds info required to build a client certificate to provide authentication info in a kubeconfig object
