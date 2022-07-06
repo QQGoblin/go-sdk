@@ -3,6 +3,7 @@ module github.com/QQGoblin/go-sdk
 go 1.16
 
 require (
+	github.com/cenkalti/backoff/v4 v4.1.2
 	github.com/pkg/errors v0.9.1
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	go.etcd.io/etcd/client/pkg/v3 v3.5.1
