@@ -7,6 +7,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,9 @@ type elector struct {
 	kubecli        *kubernetes.Clientset
 	id             string
 	leaderElection *leaderelection.LeaderElector
+	mutex          sync.Mutex
+	cancel         context.CancelFunc
+	active         bool
 }
 
 const (
@@ -71,20 +75,44 @@ func NewElector(kubecli *kubernetes.Clientset, id string, lockname string, callb
 		leaderElection: leaderElection,
 		kubecli:        kubecli,
 		id:             id,
+		cancel:         nil,
+		active:         false,
 	}, nil
 }
 
 func (e *elector) Startup() {
 
-	go wait.Forever(
-		func() {
-			klog.Infof("start leader election, id<%s>", e.id)
-			// 通过 context.Background() 保证选举进程不会退出，即使 leader 因为 renew 失败导致 leaderElection.Run() 退出，仍然能够重新加入选举
-			e.leaderElection.Run(context.Background())
-			klog.Warningf("exit leader election, id<%s>", e.id)
+	klog.Info("start election program")
 
+	if e.active {
+		return
+	}
+
+	// 创建 context
+	e.mutex.Lock()
+	var ctx context.Context
+	ctx, e.cancel = context.WithCancel(context.Background())
+	e.active = true
+	e.mutex.Unlock()
+
+	// 支持在不影响主线程的情况下，启动或者停止选举任务
+	go wait.UntilWithContext(ctx,
+		func(ctx context.Context) {
+			e.leaderElection.Run(ctx)
+			klog.Warning("election program exit")
 		}, DEFAULT_JOINING_ELECTOR_AGAIN)
+}
 
+func (e *elector) Stop() {
+	klog.Info("stop election program")
+	// 加锁
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	if e.cancel != nil {
+		e.active = false // 关闭 election 携程
+		e.cancel()
+		e.cancel = nil
+	}
 }
 
 func (e *elector) IsLeader() bool {

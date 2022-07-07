@@ -55,6 +55,7 @@ func main() {
 	stopCh := make(chan os.Signal, 0)
 	signal.Notify(stopCh, os.Interrupt, os.Kill)
 	<-stopCh
+	elector.Stop()
 	klog.Info("exit success.")
 
 }
