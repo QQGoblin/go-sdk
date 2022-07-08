@@ -1,10 +1,14 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"net"
+	"strconv"
+	"strings"
 )
 
 // Get local Address from local route table.
@@ -56,4 +60,27 @@ func GetLocalAddresses(dev string, filterDevs ...string) (sets.String, error) {
 		}
 	}
 	return res, nil
+}
+
+// ParseIPV4Mask parse 255.255.0.0 string to cidr
+func ParseIPV4Mask(m string) (net.IPMask, error) {
+
+	bs := strings.Split(m, ".")
+	if len(bs) != 4 {
+		return nil, errors.New(fmt.Sprintf("%s format is wrong", m))
+	}
+	mask := make([]byte, 4)
+	for i := 3; i >= 0; i-- {
+		b, err := strconv.Atoi(bs[i])
+		if err != nil {
+			return nil, nil
+		}
+		mask[i] = byte(b & 0xFF)
+	}
+
+	ipMask := net.IPMask{mask[0], mask[1], mask[2], mask[3]}
+	if one, _ := ipMask.Size(); one < 32 && one > 0 {
+		return ipMask, nil
+	}
+	return nil, errors.New(fmt.Sprintf("%s format is wrong", m))
 }
