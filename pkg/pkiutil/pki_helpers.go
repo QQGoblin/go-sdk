@@ -638,3 +638,25 @@ func VerifyCertChain(cert *x509.Certificate, intermediates []*x509.Certificate, 
 
 	return nil
 }
+
+// TryLoadKeyFromString load key from string
+func TryLoadKeyFromString(data string) (crypto.Signer, error) {
+
+	privKey, err := keyutil.ParsePrivateKeyPEM([]byte(data))
+	if err != nil {
+		return nil, fmt.Errorf("parse private key: %v", err)
+	}
+
+	// Allow RSA and ECDSA formats only
+	var key crypto.Signer
+	switch k := privKey.(type) {
+	case *rsa.PrivateKey:
+		key = k
+	case *ecdsa.PrivateKey:
+		key = k
+	default:
+		return nil, errors.New("the private key is neither in RSA nor ECDSA format")
+	}
+
+	return key, nil
+}

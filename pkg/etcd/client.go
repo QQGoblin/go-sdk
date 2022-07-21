@@ -3,9 +3,12 @@ package etcd
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"k8s.io/client-go/util/cert"
+	"k8s.io/klog/v2"
 	"time"
 )
 
@@ -70,6 +73,36 @@ func New(ips ...string) (*etcdV3Client, error) {
 func (c *etcdV3Client) WithTimeout(timeout time.Duration) *etcdV3Client {
 	c.timeout = timeout
 	return c
+}
+
+// BundleTlsConfig 从 string 中加载 tls.Config 信息
+func BundleTlsConfig(caCertStr, certStr, keyStr string) (*tls.Config, error) {
+
+	caCerts, err := cert.ParseCertsPEM([]byte(caCertStr))
+	if err != nil {
+		klog.Errorf("error parse CACert: %s", err)
+		return nil, err
+	}
+	caCert := caCerts[0]
+
+	tlsCert, err := tls.X509KeyPair([]byte(certStr), []byte(keyStr))
+	if err != nil {
+		klog.Errorf("error parse bundle cert and key: %s", err)
+		return nil, err
+	}
+
+	cfg := tls.Config{
+		Certificates: []tls.Certificate{
+			tlsCert,
+		},
+		RootCAs:            x509.NewCertPool(),
+		InsecureSkipVerify: true,
+		MinVersion:         tls.VersionTLS12,
+		MaxVersion:         tls.VersionTLS12,
+	}
+
+	cfg.RootCAs.AddCert(caCert)
+	return &cfg, nil
 }
 
 // Close 关闭 etcd 客户端连接
