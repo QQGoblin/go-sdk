@@ -23,11 +23,13 @@ import (
 	"crypto/elliptic"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"k8s.io/klog/v2"
 	"math"
 	"math/big"
 	"net"
@@ -659,4 +661,43 @@ func TryLoadKeyFromString(data string) (crypto.Signer, error) {
 	}
 
 	return key, nil
+}
+
+// TryLoadKeyFromString load Cert from string
+func TryLoadCertificateFromString(data string) (*x509.Certificate, error) {
+	// 读取内置的证书文件
+	certs, err := certutil.ParseCertsPEM([]byte(data))
+	if err != nil {
+		klog.Errorf("error parse bundle cacert: %s", err)
+		return nil, err
+	}
+	return certs[0], nil
+}
+
+func LoadCertificateAndKeyFromString(cert, key string) (*x509.Certificate, crypto.Signer, error) {
+	// 读取内置的证书文件
+	caCert, err := TryLoadCertificateFromString(cert)
+	if err != nil {
+		klog.Errorf("load ca cert failed:%v", err)
+		return nil, nil, err
+	}
+
+	caKey, err := TryLoadKeyFromString(key)
+	if err != nil {
+		klog.Errorf("load key failed:%v", err)
+		return nil, nil, err
+	}
+	return caCert, caKey, nil
+}
+
+//LoadTLSCertificate 从 certStr、keyStr 获取 tls.Certificate 信息，用于 HTTPs 请求
+func LoadTLSCertificate(certStr, keyStr string) (*tls.Certificate, error) {
+
+	cert, err := tls.X509KeyPair([]byte(certStr), []byte(keyStr))
+	if err != nil {
+		klog.Errorf("error parse bundle cert and key: %s", err)
+		return nil, err
+	}
+
+	return &cert, nil
 }

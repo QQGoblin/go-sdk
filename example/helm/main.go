@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	helm2 "github.com/QQGoblin/go-sdk/pkg/helm"
+	helm "github.com/QQGoblin/go-sdk/pkg/helm"
 	"k8s.io/klog/v2"
 	"os"
 )
@@ -12,7 +12,7 @@ func main() {
 	if len(args) < 2 {
 		klog.Fatal("Pelease select chart directory or tgz.")
 	}
-	images, err := helm2.Images(args[1])
+	images, err := helm.Images(args[1])
 	if err != nil {
 		klog.Fatal("Error.")
 	}

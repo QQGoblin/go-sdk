@@ -13,12 +13,6 @@ import (
 	"strings"
 )
 
-func IsReady(release, namespace string) bool {
-	// 判断 helm 部署的 pod、deployment、statefulset 等资源是否处于 Ready 状态
-	isReady := false
-	return isReady
-}
-
 func Images(chartPath string) ([]string, error) {
 	// 提取 helm 包中的镜像信息
 
