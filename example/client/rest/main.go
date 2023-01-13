@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"github.com/QQGoblin/go-sdk/pkg/kubeutils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"time"
 )
@@ -14,10 +14,7 @@ import (
 func main() {
 
 	kubeconfig := "./kubeconfig"
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
-	}
+	config := kubeutils.GetConfigOrDie(kubeconfig, "")
 
 	gv := corev1.SchemeGroupVersion
 	config.GroupVersion = &gv

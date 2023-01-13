@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"github.com/QQGoblin/go-sdk/pkg/kubeutils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -14,10 +14,7 @@ func main() {
 	kubeconfig := "./kubeconfig"
 	master := ""
 
-	config, err := clientcmd.BuildConfigFromFlags(master, kubeconfig)
-	if err != nil {
-		klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
-	}
+	config := kubeutils.GetConfigOrDie(kubeconfig, master)
 
 	crS := runtime.NewScheme()
 	cliOpt := runtimeclient.Options{

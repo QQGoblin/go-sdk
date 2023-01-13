@@ -4,6 +4,7 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"flag"
 	"fmt"
 	"github.com/QQGoblin/go-sdk/pkg/pkiutil"
 	certutil "k8s.io/client-go/util/cert"
@@ -17,12 +18,30 @@ import (
 
 const (
 	DefaultServerCertCommonName = "ruijie"
-	DefaultServerCertFile       = "tls/server/tls.crt"
-	DefaultServerKeyFile        = "tls/server/tls.key"
+	DefaultServerCertFile       = "tls/etcd/server.crt"
+	DefaultServerKeyFile        = "tls/etcd/server.key"
+	DefaultPKIPath              = "tls"
+	DefaultCAName               = "ca"
 )
 
+var (
+	kubeServiceIP string
+	kubeCtrlIP    string
+	kubeNodeIP    string
+	kubeNodename  string
+)
+
+func init() {
+	flag.StringVar(&kubeServiceIP, "svc-address", "", "kube-apiserver 集群内网 ip 地址")
+	flag.StringVar(&kubeCtrlIP, "controller-address", "", "kube-apiserver 浮动 IP 地址")
+	flag.StringVar(&kubeNodeIP, "address", "", "节点管理网 IP 地址")
+	flag.StringVar(&kubeNodename, "nodename", "", "节点主机名")
+
+}
+
 func main() {
-	if err := kubeCerts(); err != nil {
+
+	if err := kubeCerts(kubeCtrlIP, kubeNodeIP, kubeServiceIP, kubeNodename); err != nil {
 		klog.Fatalf(err.Error())
 	}
 	if err := serverCerts(); err != nil {
@@ -57,7 +76,7 @@ func serverCerts() error {
 	}
 
 	// 读取根证书
-	caCert, caKey, err := pkiutil.TryLoadCertAndKeyFromDisk("tls", "ca")
+	caCert, caKey, err := pkiutil.TryLoadCertAndKeyFromDisk(DefaultPKIPath, DefaultCAName)
 	if err != nil {
 		return err
 	}
@@ -84,17 +103,10 @@ func serverCerts() error {
 	return nil
 }
 
-func kubeCerts() error {
-	// create all cert
-	pkiPath := "tls"
-	caName := "ca"
-	svcIp := "10.28.1.1"
-	ctrlIP := "192.168.1.1"
-	nodeIp := "172.24.1.1"
-	nodeName := "node1"
+func kubeCerts(ctrlIP, nodeIP, svcIP string, nodeName string) error {
 
 	// get all template
-	allTemplate, err := pkiutil.GetCertificateTemplates(ctrlIP, nodeIp, svcIp, nodeName)
+	allTemplate, err := pkiutil.GetCertificateTemplates(ctrlIP, nodeIP, svcIP, nodeName)
 	if err != nil {
 		return err
 	}
@@ -107,13 +119,13 @@ func kubeCerts() error {
 		pkiutil.FrontProxyClientCertAndKeyBaseName,
 	}
 	for _, certName := range certMasterNeed {
-		if err := pkiutil.GenerateCertificateFiles(pkiPath, caName, certName, allTemplate[certName]); err != nil {
+		if err := pkiutil.GenerateCertificateFiles(DefaultPKIPath, DefaultCAName, certName, allTemplate[certName]); err != nil {
 			return err
 		}
 	}
 
 	// create sa
-	if err := pkiutil.GenerateServiceAccountKeyAndPublicKeyFiles(pkiPath, x509.RSA); err != nil {
+	if err := pkiutil.GenerateServiceAccountKeyAndPublicKeyFiles(DefaultPKIPath, x509.RSA); err != nil {
 		return err
 	}
 
@@ -123,9 +135,9 @@ func kubeCerts() error {
 		pkiutil.ControllerManagerKubeConfigBaseName,
 		pkiutil.SchedulerKubeConfigBaseName,
 	}
-	localEp := fmt.Sprintf("https://%s:6433", nodeIp)
+	localEp := fmt.Sprintf("https://%s:6443", nodeIP)
 	for _, kubeconfigName := range kubeconfigMasterNeed {
-		if err := pkiutil.GenerateKubeConfigFiles(pkiPath, caName, kubeconfigName, allTemplate[kubeconfigName], localEp); err != nil {
+		if err := pkiutil.GenerateKubeConfigFiles(DefaultPKIPath, DefaultCAName, kubeconfigName, allTemplate[kubeconfigName], localEp); err != nil {
 			return err
 		}
 	}
@@ -134,9 +146,9 @@ func kubeCerts() error {
 		pkiutil.KubeletKubeConfigBaseName,
 		pkiutil.KubeProxyKubeConfigBaseName,
 	}
-	ctrlEp := fmt.Sprintf("https://%s:6433", ctrlIP)
+	ctrlEp := fmt.Sprintf("https://%s:6443", ctrlIP)
 	for _, kubeconfigName := range kubeconfigWorkerNeed {
-		if err := pkiutil.GenerateKubeConfigFiles(pkiPath, caName, kubeconfigName, allTemplate[kubeconfigName], ctrlEp); err != nil {
+		if err := pkiutil.GenerateKubeConfigFiles(DefaultPKIPath, DefaultCAName, kubeconfigName, allTemplate[kubeconfigName], ctrlEp); err != nil {
 			return err
 		}
 	}

@@ -1,12 +1,12 @@
 package main
 
 import (
+	"github.com/QQGoblin/go-sdk/pkg/kubeutils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/sample-controller/pkg/signals"
 	"time"
@@ -17,10 +17,7 @@ func main() {
 	kubeconfig := "./kubeconfig"
 	master := ""
 
-	config, err := clientcmd.BuildConfigFromFlags(master, kubeconfig)
-	if err != nil {
-		klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
-	}
+	config := kubeutils.GetConfigOrDie(kubeconfig, master)
 
 	dyClient := dynamic.NewForConfigOrDie(config)
 	dyInforFactory := dynamicinformer.NewDynamicSharedInformerFactory(dyClient, time.Second*30)
