@@ -153,7 +153,7 @@ func sendARP(iface *net.Interface, m *arpMessage) error {
 }
 
 // ARPSendGratuitous sends a gratuitous ARP message via the specified interface.
-func ARPSendGratuitous(address, ifaceName string, count int) error {
+func ARPSendGratuitous(address, ifaceName string) error {
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
 		return fmt.Errorf("failed to get interface %q: %v", ifaceName, err)
@@ -164,19 +164,9 @@ func ARPSendGratuitous(address, ifaceName string, count int) error {
 		return fmt.Errorf("failed to parse address %s", ip)
 	}
 
-	for i := 0; i < count; i++ {
-		m, err := gratuitousARP(ip, iface.HardwareAddr)
-
-		if err != nil {
-			return err
-		}
-
-		if err := sendARP(iface, m); err != nil {
-			return err
-		}
-		// This is a debug message, enable debugging to ensure that the gratuitous arp is repeating
-		fmt.Sprintf("Broadcasting ARP update for %s (%s) via %s", address, iface.HardwareAddr, iface.Name)
+	m, err := gratuitousARP(ip, iface.HardwareAddr)
+	if err != nil {
+		return err
 	}
-
-	return nil
+	return sendARP(iface, m)
 }

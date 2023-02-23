@@ -116,7 +116,7 @@ func (s *Speaker) Speak() {
 	for {
 		select {
 		case <-s.ticker.C:
-			network.ARPSendGratuitous(s.address, s.device, 1)
+			network.ARPSendGratuitous(s.address, s.device)
 		case <-s.stopSpeak:
 			s.ticker.Stop()
 			goto END

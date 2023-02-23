@@ -10,6 +10,7 @@ require (
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	go.etcd.io/etcd/client/pkg/v3 v3.5.1
 	go.etcd.io/etcd/client/v3 v3.5.1
+	golang.org/x/net v0.0.0-20220923203811-8be639271d50
 	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8
 	helm.sh/helm/v3 v3.8.2
 	k8s.io/api v0.23.5
@@ -88,7 +89,6 @@ require (
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871 // indirect
-	golang.org/x/net v0.0.0-20220923203811-8be639271d50 // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
