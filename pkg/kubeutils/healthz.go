@@ -35,6 +35,7 @@ type Healthz interface {
 	KubeProxy(host string) bool
 	//TODO: Kubelet 默认只能通过127.0.0.1 访问
 	Kubelet() bool
+	Healthz(string) bool
 }
 
 type healthzHelper struct {
@@ -44,30 +45,30 @@ type healthzHelper struct {
 }
 
 func (h *healthzHelper) KubeApiserver(host string) bool {
-	return h.healthz(fmt.Sprintf("https://%s:%d/healthz", host, DefaultKubeApiserverPort))
+	return h.Healthz(fmt.Sprintf("https://%s:%d/Healthz", host, DefaultKubeApiserverPort))
 }
 
 func (h *healthzHelper) KubeControllerManager(host string) bool {
-	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", host, DefaultKubeControllerManagerPort))
+	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", host, DefaultKubeControllerManagerPort))
 }
 
 func (h *healthzHelper) KubeScheduler(host string) bool {
-	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", host, DefaultKubeSchedulerPort))
+	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", host, DefaultKubeSchedulerPort))
 }
 
 func (h *healthzHelper) KubeProxy(host string) bool {
-	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", host, DefaultKubeProxyHealthzPort))
+	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", host, DefaultKubeProxyHealthzPort))
 }
 
 func (h *healthzHelper) Kubelet() bool {
-	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", "127.0.0.1", DefaultKubeletHealthzPort))
+	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", "127.0.0.1", DefaultKubeletHealthzPort))
 }
 
-func (h *healthzHelper) healthz(endpoint string) bool {
+func (h *healthzHelper) Healthz(endpoint string) bool {
 
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		klog.Errorf("healthz check %s failed, %v", endpoint, err)
+		klog.Errorf("Healthz check %s failed, %v", endpoint, err)
 		return false
 	}
 
@@ -96,7 +97,7 @@ func (h *healthzHelper) healthz(endpoint string) bool {
 		return nil
 	}
 	if err := backoff.Retry(f, backoff.WithMaxRetries(backoff.NewConstantBackOff(h.intervals), h.attempts)); err != nil {
-		klog.Errorf("healthz check %s failed, %v", endpoint, err)
+		klog.Errorf("Healthz check %s failed, %v", endpoint, err)
 		return false
 	}
 
