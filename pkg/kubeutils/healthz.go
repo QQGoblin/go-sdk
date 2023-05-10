@@ -87,11 +87,9 @@ func (h *healthzHelper) Healthz(endpoint string) bool {
 	f := func() error {
 		resp, err := client.Get(endpoint)
 		if err != nil {
-			klog.Errorf("call <%s> failed, %v", endpoint, err)
 			return err
 		}
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusForbidden {
-			klog.Errorf("check health for %s, http code %d", endpoint, resp.StatusCode)
 			return err
 		}
 		return nil
