@@ -35,7 +35,7 @@ func NewSocketClient(socket string, timeout time.Duration) (*SocketClient, error
 	}, nil
 }
 
-// 检查 docker daemon 是否在运行，参考：curl -XGET --unix-socket /var/run/docker.sock  -H 'Content-Type: application/json' http://localhost/info
+// Info 检查 docker daemon 是否在运行，参考：curl -XGET --unix-socket /var/run/docker.sock  -H 'Content-Type: application/json' http://localhost/info
 func (c *SocketClient) Info() (*Info, error) {
 
 	req, err := http.NewRequest("GET", "/info", nil)

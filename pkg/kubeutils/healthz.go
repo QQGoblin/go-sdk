@@ -3,8 +3,7 @@ package kubeutils
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
-	"k8s.io/klog/v2"
+	"github.com/QQGoblin/go-sdk/pkg/httputil"
 	"net/http"
 	"net/url"
 	"time"
@@ -33,9 +32,7 @@ type Healthz interface {
 	KubeControllerManager(host string) bool
 	KubeScheduler(host string) bool
 	KubeProxy(host string) bool
-	//TODO: Kubelet 默认只能通过127.0.0.1 访问
 	Kubelet() bool
-	Healthz(string) bool
 }
 
 type healthzHelper struct {
@@ -45,34 +42,34 @@ type healthzHelper struct {
 }
 
 func (h *healthzHelper) KubeApiserver(host string) bool {
-	return h.Healthz(fmt.Sprintf("https://%s:%d/Healthz", host, DefaultKubeApiserverPort))
+	return h.healthz(fmt.Sprintf("https://%s:%d/healthz", host, DefaultKubeApiserverPort))
 }
 
 func (h *healthzHelper) KubeControllerManager(host string) bool {
-	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", host, DefaultKubeControllerManagerPort))
+	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", host, DefaultKubeControllerManagerPort))
 }
 
 func (h *healthzHelper) KubeScheduler(host string) bool {
-	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", host, DefaultKubeSchedulerPort))
+	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", host, DefaultKubeSchedulerPort))
 }
 
 func (h *healthzHelper) KubeProxy(host string) bool {
-	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", host, DefaultKubeProxyHealthzPort))
+	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", host, DefaultKubeProxyHealthzPort))
 }
 
 func (h *healthzHelper) Kubelet() bool {
-	return h.Healthz(fmt.Sprintf("http://%s:%d/Healthz", "127.0.0.1", DefaultKubeletHealthzPort))
+	return h.healthz(fmt.Sprintf("http://%s:%d/healthz", "127.0.0.1", DefaultKubeletHealthzPort))
 }
 
-func (h *healthzHelper) Healthz(endpoint string) bool {
+func (h *healthzHelper) healthz(endpoint string) bool {
 
 	u, err := url.Parse(endpoint)
+
 	if err != nil {
-		klog.Errorf("Healthz check %s failed, %v", endpoint, err)
 		return false
 	}
 
-	client := http.Client{
+	client := &http.Client{
 		Timeout: h.timeout,
 	}
 
@@ -84,18 +81,8 @@ func (h *healthzHelper) Healthz(endpoint string) bool {
 		}
 	}
 
-	f := func() error {
-		resp, err := client.Get(endpoint)
-		if err != nil {
-			return err
-		}
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusForbidden {
-			return err
-		}
-		return nil
-	}
-	if err := backoff.Retry(f, backoff.WithMaxRetries(backoff.NewConstantBackOff(h.intervals), h.attempts)); err != nil {
-		klog.Errorf("Healthz check %s failed, %v", endpoint, err)
+	_, err = httputil.Healthz(client, endpoint, h.intervals, h.attempts)
+	if err != nil {
 		return false
 	}
 
