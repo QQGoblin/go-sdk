@@ -16,14 +16,12 @@ import (
 var (
 	peerURL         string
 	clusterPeerURLs string
-	waldir          string
 )
 
 func init() {
 
 	flag.StringVar(&peerURL, "url", "", "peer url")
 	flag.StringVar(&clusterPeerURLs, "peers", "", "comma separated cluster peers")
-	flag.StringVar(&waldir, "waldir", "/opt/raftmgr", "wal dir path")
 }
 
 var (
@@ -52,7 +50,7 @@ func main() {
 	zaplogger.Info("start raft node", zap.Uint64("id", id))
 	zaplogger.Info("cluster node", zap.String("peers", fmt.Sprintf("%v", clusterPeers)))
 
-	node := NewRaftNode(id, clusterPeers, waldir, zaplogger)
+	node := NewRaftNode(id, clusterPeers, zaplogger)
 
 	node.Start()
 
@@ -83,8 +81,7 @@ func ReportClusterStatus(ctx context.Context, node *RaftNode) {
 		case <-t.C:
 			if isLeader, _ := node.IsLeader(); isLeader {
 				// TODO: do something
-			} else {
-				// TODO: do something
+				zaplogger.Info(">>> report cluster status: i am leader <<<")
 			}
 		case <-ctx.Done():
 			t.Stop()

@@ -10,13 +10,10 @@ import (
 	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
 	stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
-	"go.etcd.io/etcd/server/v3/wal"
-	"go.etcd.io/etcd/server/v3/wal/walpb"
 	"go.uber.org/zap"
 	"hash/crc32"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -30,13 +27,10 @@ const (
 
 type RaftNode struct {
 	id           uint64
-	prefix       string
 	raw          raft.Node
 	config       *raft.Config
 	tick         *time.Ticker
 	storage      *raft.MemoryStorage
-	wal          *wal.WAL
-	waldir       string
 	clusterPeers []raft.Peer
 	peerURLs     map[uint64]string
 	transport    *rafthttp.Transport
@@ -46,6 +40,8 @@ type RaftNode struct {
 }
 
 func (rc *RaftNode) Process(ctx context.Context, m raftpb.Message) error {
+	// TODO: leader election only, don't commit anything.
+	m.Commit = 0
 	return rc.raw.Step(ctx, m)
 }
 func (rc *RaftNode) IsIDRemoved(id uint64) bool  { return false }
@@ -54,7 +50,7 @@ func (rc *RaftNode) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
 	rc.raw.ReportSnapshot(id, status)
 }
 
-func NewRaftNode(id uint64, peers map[uint64]string, waldir string, logger *zap.Logger) *RaftNode {
+func NewRaftNode(id uint64, peers map[uint64]string, logger *zap.Logger) *RaftNode {
 
 	raftStorage := raft.NewMemoryStorage()
 
@@ -86,7 +82,6 @@ func NewRaftNode(id uint64, peers map[uint64]string, waldir string, logger *zap.
 		stopc:        make(chan struct{}),
 		httpstopc:    make(chan struct{}),
 		logger:       logger,
-		waldir:       waldir,
 	}
 
 	return rc
@@ -98,15 +93,7 @@ func (rc *RaftNode) Start() {
 		rc.raw.Stop()
 	}
 
-	oldWal := wal.Exist(rc.waldir)
-
-	rc.wal = rc.openWAL()
-
-	if oldWal {
-		rc.raw = raft.RestartNode(rc.config)
-	} else {
-		rc.raw = raft.StartNode(rc.config, rc.clusterPeers)
-	}
+	rc.raw = raft.StartNode(rc.config, rc.clusterPeers)
 
 	if rc.transport != nil {
 		rc.transport.Stop()
@@ -172,9 +159,6 @@ func (rc *RaftNode) serveChannels() {
 	rc.tick.Reset(DefaultHeartbeatTickMS)
 	defer rc.tick.Stop()
 
-	defer rc.wal.Close()
-
-	// event loop on raft state machine updates
 	for {
 		select {
 		case <-rc.tick.C:
@@ -182,7 +166,7 @@ func (rc *RaftNode) serveChannels() {
 
 		// 转发请求到其他节点
 		case rd := <-rc.raw.Ready():
-			rc.wal.Save(rd.HardState, rd.Entries)
+			//rc.wal.Save(rd.HardState, rd.Entries)
 			rc.storage.Append(rd.Entries)
 			rc.transport.Send(rd.Messages)
 			rc.raw.Advance()
@@ -216,38 +200,6 @@ func (rc *RaftNode) serveRaft() {
 	default:
 		rc.logger.Fatal("failed to serve raft http")
 	}
-}
-
-func (rc *RaftNode) openWAL() *wal.WAL {
-
-	rc.logger.Info("replaying WAL", zap.Uint64("id", rc.id))
-
-	if !wal.Exist(rc.waldir) {
-		if err := os.MkdirAll(rc.waldir, 0750); err != nil {
-			rc.logger.Fatal(err.Error(), zap.String("wal-dir", rc.waldir))
-		}
-
-		w, err := wal.Create(zap.NewExample(), rc.waldir, nil)
-		if err != nil {
-			rc.logger.Fatal("create wal error")
-		}
-		w.Close()
-	}
-
-	w, err := wal.Open(zap.NewExample(), rc.waldir, walpb.Snapshot{})
-	if err != nil {
-		rc.logger.Fatal("error loading WAL")
-	}
-
-	_, st, ents, err := w.ReadAll()
-	if err != nil {
-		rc.logger.Fatal("failed to read WAL")
-	}
-
-	rc.storage.SetHardState(st)
-	rc.storage.Append(ents)
-
-	return w
 }
 
 func GetID(peerURL string) uint64 {
