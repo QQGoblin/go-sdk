@@ -89,3 +89,21 @@ func bytewise(numeric uint32) net.IP {
 	}
 	return net.IP(ip)
 }
+
+// SubnetAllIPs return all ip address in this subnet
+func SubnetAllIPs(network *net.IPNet) []*net.IP {
+
+	ips := make([]*net.IP, 0)
+	ipInNumeric := numeric(network.IP.Mask(network.Mask))
+
+	for {
+		ip := bytewise(ipInNumeric)
+		if network.Contains(ip) {
+			ips = append(ips, &ip)
+		} else {
+			break
+		}
+		ipInNumeric++
+	}
+	return ips
+}
