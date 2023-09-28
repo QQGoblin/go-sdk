@@ -3,7 +3,7 @@ package kubeutils
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/QQGoblin/go-sdk/pkg/httputil"
+	"github.com/QQGoblin/go-sdk/pkg/httputils"
 	"net/http"
 	"net/url"
 	"time"
@@ -81,7 +81,7 @@ func (h *healthzHelper) healthz(endpoint string) bool {
 		}
 	}
 
-	_, err = httputil.Healthz(client, endpoint, h.intervals, h.attempts)
+	_, err = httputils.Healthz(client, endpoint, h.intervals, h.attempts)
 	if err != nil {
 		return false
 	}
