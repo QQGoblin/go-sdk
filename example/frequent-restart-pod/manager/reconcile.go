@@ -13,13 +13,13 @@ type reconciler struct {
 	maxRestart int
 	threshold  time.Duration
 	cache      cache.Cache
-	status     map[string]*podQueue
+	status     map[string]*record
 }
 
 func NewReconciler(maxRestart int, threshold time.Duration, cache cache.Cache) reconcile.Reconciler {
 
 	return &reconciler{maxRestart: maxRestart, threshold: threshold, cache: cache,
-		status: make(map[string]*podQueue),
+		status: make(map[string]*record),
 	}
 }
 
@@ -33,40 +33,49 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	q, isExist := r.status[currentPod.Name]
 	if !isExist {
-		r.status[currentPod.Name] = NewPodQueue(r.maxRestart)
+		histroy := NewRecord(r.maxRestart)
+		histroy.SetFirstSeen(currentPod)
+		r.status[currentPod.Name] = histroy
 		return reconcile.Result{}, nil
 	}
 
-	lastPod := q.Last()
-
-	if isNeedUpdate(currentPod, lastPod) {
+	if isNeedUpdate(currentPod, q) {
 		q.Push(currentPod)
-		klog.Infof("Pod<%s> CrashLoopBackOff %d", currentPod.Name, q.count)
+		klog.Infof("Pod<%s> CrashLoopBackOff %d", currentPod.Name, q.restartCount)
 	}
 
 	return reconcile.Result{}, nil
 }
 
-func isNeedUpdate(newPod, oldPod *v1.Pod) bool {
+func isNeedUpdate(newPod *v1.Pod, histroy *record) bool {
 
 	newCStates := convertContainerStateMap(newPod)
 
-	if oldPod == nil {
+	if histroy.Size() == 0 {
 		for _, newCState := range newCStates {
+			// 判断当前是否有 container 处于退出状态
 			if isTerminated(newCState) {
+				return true
+			}
+		}
+
+		// 配置 livenessProbe 时，容器可能被直接重启，此时从观测者看 State 不经过 Terminated 和 Waiting 状态，而一直处于 Running 状态。
+		// 此时比较 containerID 是否发生变化，来判断容器是否发生了重启。
+		firstSeenCStates := convertContainerStateMap(histroy.firstSeen)
+		for name, newCState := range newCStates {
+			firstSeenCState := firstSeenCStates[name]
+			if firstSeenCState.ContainerID != newCState.ContainerID {
 				return true
 			}
 		}
 		return false
 	}
 
-	oldCStates := convertContainerStateMap(oldPod)
-
+	// 判断 containerID 相比上一次记录是否发生变化
+	lastCStates := convertContainerStateMap(histroy.Last())
 	for name, newCState := range newCStates {
-		oldCState := oldCStates[name]
-
-		// 新旧容器的 ID 发生变化，并且新的容器处于退出状态。表示容器刚刚发生了退出
-		if oldCState.ContainerID != newCState.ContainerID && isTerminated(newCState) {
+		lastCState := lastCStates[name]
+		if lastCState.ContainerID != newCState.ContainerID {
 			return true
 		}
 	}
@@ -87,11 +96,12 @@ func convertContainerStateMap(p *v1.Pod) map[string]v1.ContainerStatus {
 
 func isTerminated(s v1.ContainerStatus) bool {
 
-	// 判断 container 是否处于终止状态
+	// State.Terminated 非空，表示容器退出
 	if s.State.Terminated != nil {
 		return true
 	}
 
+	// s.State.Waiting 非空，表示容器等待启动，原因可能是初次启动，或者故障重启
 	if s.State.Waiting != nil {
 		return s.State.Waiting.Reason == "CrashLoopBackOff"
 	}

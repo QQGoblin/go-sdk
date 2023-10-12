@@ -5,51 +5,59 @@ import (
 	"sync"
 )
 
-type podQueue struct {
-	items   []*v1.Pod
-	size    int
-	count   int
-	current int
-	lock    sync.Mutex
+type record struct {
+	size           int
+	restartCount   int
+	restartHistroy []*v1.Pod
+	index          int
+	firstSeen      *v1.Pod
+	lock           sync.Mutex
 }
 
-func NewPodQueue(size int) *podQueue {
-	return &podQueue{
-		items:   make([]*v1.Pod, size),
-		size:    size,
-		current: -1,
+func NewRecord(size int) *record {
+	return &record{
+		restartHistroy: make([]*v1.Pod, size),
+		size:           size,
+		index:          -1,
 	}
 }
 
-func (q *podQueue) Push(p *v1.Pod) {
+func (q *record) Push(p *v1.Pod) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
-	q.count++
-	q.current++
-	if q.current >= q.size {
-		for i := 1; i < q.current; i++ {
-			q.items[i-1] = q.items[i]
+	q.restartCount++
+	q.index++
+	if q.index >= q.size {
+		for i := 1; i < q.index; i++ {
+			q.restartHistroy[i-1] = q.restartHistroy[i]
 		}
-		q.current = q.size - 1
+		q.index = q.size - 1
 	}
-	q.items[q.current] = p
+	q.restartHistroy[q.index] = p
 
 }
 
-func (q *podQueue) Size() int {
-	return q.current + 1
+func (q *record) Size() int {
+	return q.index + 1
 }
 
-func (q *podQueue) First() *v1.Pod {
-	if q.current >= 0 {
-		return q.items[0]
+func (q *record) First() *v1.Pod {
+	if q.index >= 0 {
+		return q.restartHistroy[0]
 	}
 	return nil
 }
 
-func (q *podQueue) Last() *v1.Pod {
-	if q.current >= 0 {
-		return q.items[q.current]
+func (q *record) FirstSeen() *v1.Pod {
+	return q.firstSeen
+}
+func (q *record) SetFirstSeen(p *v1.Pod) {
+	q.firstSeen = p
+}
+
+func (q *record) Last() *v1.Pod {
+	if q.index >= 0 {
+		return q.restartHistroy[q.index]
 	}
 	return nil
 }
