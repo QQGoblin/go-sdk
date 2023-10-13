@@ -2,11 +2,20 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
+	appv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"time"
+)
+
+const (
+	SPPodRestartCount appv1.ReplicaSetConditionType = "SPPodRestartCount"
 )
 
 type reconciler struct {
@@ -14,11 +23,13 @@ type reconciler struct {
 	threshold  time.Duration
 	cache      cache.Cache
 	status     map[string]*record
+	cli        *kubernetes.Clientset
 }
 
-func NewReconciler(maxRestart int, threshold time.Duration, cache cache.Cache) reconcile.Reconciler {
+func NewReconciler(maxRestart int, threshold time.Duration, cache cache.Cache, cli *kubernetes.Clientset) reconcile.Reconciler {
 
 	return &reconciler{maxRestart: maxRestart, threshold: threshold, cache: cache,
+		cli:    cli,
 		status: make(map[string]*record),
 	}
 }
@@ -42,9 +53,79 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if isNeedUpdate(currentPod, q) {
 		q.Push(currentPod)
 		klog.Infof("Pod<%s> CrashLoopBackOff %d", currentPod.Name, q.restartCount)
+		if err := r.refreshOwner(ctx, currentPod, q.restartCount); err != nil {
+			klog.Errorf("Patch SPPodRestartCount Condition failed: %v", err)
+		}
+
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *reconciler) refreshOwner(ctx context.Context, p *v1.Pod, restartCount int) error {
+
+	var rsOwnerReference *metav1.OwnerReference
+	for _, o := range p.GetOwnerReferences() {
+		// 只处理 ReplicaSet 管理的 pod
+		if o.Kind == "ReplicaSet" {
+			rsOwnerReference = &o
+			break
+		}
+	}
+
+	// POD 上游没有 controller 直接退出
+	if rsOwnerReference == nil {
+		return nil
+	}
+
+	var owner = &appv1.ReplicaSet{}
+	if err := r.cache.Get(ctx, types.NamespacedName{
+		Name:      rsOwnerReference.Name,
+		Namespace: p.Namespace,
+	}, owner); err != nil {
+		klog.Errorf("%s is not found in cache: %v", owner, err)
+		return err
+	}
+
+	statusConditions := make([]appv1.ReplicaSetCondition, 0)
+	podRestartCond := make(map[string]int)
+	for _, c := range owner.Status.Conditions {
+		if c.Type == SPPodRestartCount && c.Message != "" {
+			if err := json.Unmarshal([]byte(c.Message), &podRestartCond); err != nil {
+				klog.Errorf("%s with error message %s", SPPodRestartCount, c.Message)
+				continue
+			}
+		}
+		statusConditions = append(statusConditions, *c.DeepCopy())
+	}
+
+	if oldCount, isOK := podRestartCond[p.Spec.NodeName]; isOK {
+		podRestartCond[p.Spec.NodeName] = oldCount + 1
+	} else {
+		podRestartCond[p.Spec.NodeName] = restartCount
+	}
+
+	condMessage, _ := json.Marshal(podRestartCond)
+
+	statusConditions = append(statusConditions, appv1.ReplicaSetCondition{
+		Type:               SPPodRestartCount,
+		Status:             v1.ConditionFalse,
+		LastTransitionTime: metav1.Now(),
+		Reason:             string(SPPodRestartCount),
+		Message:            string(condMessage),
+	})
+	patch := appv1.ReplicaSet{
+		Status: *owner.Status.DeepCopy(),
+	}
+	patch.Status.Conditions = statusConditions
+	patchByte, _ := json.Marshal(patch)
+	if _, err := r.cli.AppsV1().ReplicaSets(p.Namespace).Patch(
+		context.Background(), owner.Name, types.StrategicMergePatchType, patchByte, metav1.PatchOptions{}, "status",
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func isNeedUpdate(newPod *v1.Pod, histroy *record) bool {

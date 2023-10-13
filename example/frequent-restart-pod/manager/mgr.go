@@ -2,8 +2,10 @@ package manager
 
 import (
 	"context"
+	appv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -13,17 +15,26 @@ import (
 	"time"
 )
 
-var scheme = runtime.NewScheme()
-
 func RunOrDie(ctx context.Context, kubeconfig, namespace string, maxRestart int, threshold time.Duration) {
+
+	var scheme = runtime.NewScheme()
 
 	if err := v1.AddToScheme(scheme); err != nil {
 		klog.Fatalf("run controller manager failed: %v", err)
 	}
 
+	if err := appv1.AddToScheme(scheme); err != nil {
+		klog.Fatalf("add scheme failed: %v", err)
+	}
+
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		klog.Fatalf("build config from flags failed: %v", err)
+	}
+
+	kubecli, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		klog.Fatalf("build clientset from flags failed: %v", err)
 	}
 
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
@@ -42,7 +53,7 @@ func RunOrDie(ctx context.Context, kubeconfig, namespace string, maxRestart int,
 
 	if err = ctrl.NewControllerManagedBy(mgr).For(&v1.Pod{}).
 		WithEventFilter(ignoreUpdateAndGenericPredicate()). // 过滤事件类型
-		Complete(NewReconciler(maxRestart, threshold, mgr.GetCache())); err != nil {
+		Complete(NewReconciler(maxRestart, threshold, mgr.GetCache(), kubecli)); err != nil {
 		klog.Fatalf("run controller manager failed: %v", err)
 	}
 
